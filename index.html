@@ -52,7 +52,7 @@ button{cursor:pointer}
   background:var(--card);border:1px solid var(--line);border-radius:17px;padding:12px;box-shadow:var(--shadow)
 }
 .q strong{display:block;font-size:19px;margin-top:3px}
-.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:12px}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}
 .tab{
   border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 4px;border-radius:13px;font-weight:800;font-size:13px
 }
@@ -108,7 +108,7 @@ button{cursor:pointer}
   position:fixed;left:50%;bottom:0;transform:translateX(-50%);
   width:min(100%,620px);background:color-mix(in srgb,var(--card) 94%, transparent);
   backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:9px 12px calc(9px + env(safe-area-inset-bottom));
-  display:grid;grid-template-columns:repeat(5,1fr);gap:7px;z-index:15
+  display:grid;grid-template-columns:repeat(4,1fr);gap:7px;z-index:15
 }
 .nav-btn{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:800;padding:6px}
 .nav-btn span{display:block;font-size:20px;margin-bottom:2px}
@@ -259,9 +259,6 @@ button{cursor:pointer}
   <button class="nav-btn" data-view="historyView"><span>🗓️</span>기록</button>
   <button class="nav-btn" data-view="statsView"><span>📈</span>통계</button>
   <button class="nav-btn" data-view="settingsView"><span>⚙️</span>설정</button>
-  <button class="nav-btn" id="timerNavBtn" onclick="toggleTimerPanel()">
-    <span>⏱️</span><span id="timerNavText" style="font-size:11px">타이머</span>
-  </button>
 </div>
 
 <div class="modal" id="exerciseModal">
@@ -479,25 +476,8 @@ function refreshTimerSettingsUI(){
     if(b) b.classList.toggle("active",getDefaultRest()===sec);
   });
 }
-function toggleTimerPanel(){
-  const bar=document.getElementById("timerBar");
-  if(bar.classList.contains("show")) stopTimer();
-  else{
-    secondsLeft=getDefaultRest();
-    updateTimerText();
-    bar.classList.add("show");
-    updateTimerNav();
-  }
-}
-function updateTimerNav(){
-  const t=document.getElementById("timerNavText");
-  if(!t) return;
-  if(timerInt || document.getElementById("timerBar").classList.contains("show")){
-    const m=String(Math.floor(secondsLeft/60)).padStart(2,"0");
-    const s=String(secondsLeft%60).padStart(2,"0");
-    t.textContent=`${m}:${s}`;
-  }else t.textContent="타이머";
-}
+
+
 
 function openExerciseModal(){
   editingIndex=null;
@@ -527,22 +507,22 @@ function deleteExercise(i){
   localStorage.setItem("hl_routine",JSON.stringify(routine));
   renderWorkout();
 }
-function openTimer(){timerBar.classList.add("show");updateTimerText();updateTimerNav()}
+function openTimer(){timerBar.classList.add("show");updateTimerText()}
 function startTimer(sec){
   if(timerInt) clearInterval(timerInt);
-  secondsLeft=sec; timerBar.classList.add("show"); updateTimerText(); updateTimerNav();
+  secondsLeft=sec; timerBar.classList.add("show"); updateTimerText();
   timerInt=setInterval(()=>{
-    secondsLeft--; updateTimerText(); updateTimerNav();
+    secondsLeft--; updateTimerText();
     if(secondsLeft<=0){
       clearInterval(timerInt); timerInt=null;
       if(navigator.vibrate) navigator.vibrate([180,100,180]);
       alert("휴식 끝!");
-      timerBar.classList.remove("show"); updateTimerNav();
+      timerBar.classList.remove("show");
     }
   },1000);
 }
 function stopTimer(){
-  if(timerInt) clearInterval(timerInt); timerInt=null; timerBar.classList.remove("show"); updateTimerNav();
+  if(timerInt) clearInterval(timerInt); timerInt=null; timerBar.classList.remove("show");
 }
 function updateTimerText(){
   const m=String(Math.floor(secondsLeft/60)).padStart(2,"0");
@@ -625,7 +605,7 @@ document.querySelectorAll(".nav-btn").forEach(btn=>{
 });
 exerciseModal.addEventListener("click",e=>{if(e.target===exerciseModal)closeExerciseModal()});
 
-initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI(); updateTimerNav();
+initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
 </script>
 
 <script>
