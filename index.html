@@ -145,6 +145,17 @@ button{cursor:pointer}
 .timer-choice{display:flex;gap:5px}.timer-choice button{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:9px;padding:7px 9px;font-weight:800}
 .timer-choice button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+
+.history-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer}
+.history-detail{display:none;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.history-item.open .history-detail{display:block}
+.history-ex{padding:9px 0;border-bottom:1px solid var(--line)}
+.history-ex:last-child{border-bottom:0}
+.history-ex-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:5px}
+.history-ex-head span{font-size:12px;color:var(--muted)}
+.history-set{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px;color:var(--muted)}
+.history-set b{color:var(--text)}
+
 </style>
 </head>
 <body>
@@ -188,7 +199,7 @@ button{cursor:pointer}
       <div class="section-head">
         <div>
           <h3 id="dayTitle"></h3>
-          <div class="sub">중량·횟수 입력 후 체크</div>
+          <div class="sub">중량·횟수 입력 후 체크 · <span id="dayInfoDate"></span></div>
         </div>
         <span class="pill">8–12회 · RPE 8–9</span>
       </div>
@@ -324,9 +335,16 @@ let editingIndex = null;
 let timerInt = null, secondsLeft = 90;
 
 function dateKey(d=new Date()){ return d.toISOString().slice(0,10); }
+function dateForDayKey(dayKey){
+  const map={mon:0,tue:1,wed:2,thu:3,fri:4};
+  const monday=startOfWeek(new Date());
+  const d=new Date(monday);
+  d.setDate(monday.getDate()+(map[dayKey]??0));
+  return dateKey(d);
+}
 function todayRecord(){
   const all = JSON.parse(localStorage.getItem("hl_records")||"{}");
-  const k = dateKey();
+  const k = dateForDayKey(activeDay);
   if(!all[k]) all[k] = {};
   if(!all[k][activeDay]) all[k][activeDay] = {};
   return {all,k,rec:all[k][activeDay]};
@@ -353,6 +371,7 @@ function renderWorkout(){
   const day=routine[activeDay];
   document.getElementById("dayTitle").textContent=`${day.label}요일 · ${day.title}`;
   document.getElementById("heroTitle").textContent=day.title;
+  const di=document.getElementById("dayInfoDate"); if(di) di.textContent=dateForDayKey(activeDay);
   const {rec}=todayRecord();
   const list=document.getElementById("exerciseList"); list.innerHTML="";
   day.exercises.forEach((ex,ei)=>{
@@ -561,15 +580,57 @@ function renderHistory(){
   const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
   const list=historyList; list.innerHTML="";
   const dates=Object.keys(all).sort().reverse();
-  if(!dates.length){list.innerHTML='<div class="section-card"><div class="sub">아직 저장된 기록이 없습니다.</div></div>';return}
+  if(!dates.length){
+    list.innerHTML='<div class="section-card"><div class="sub">아직 저장된 기록이 없습니다.</div></div>';
+    return;
+  }
+
   dates.slice(0,30).forEach(date=>{
-    let sets=0,vol=0;
-    Object.values(all[date]).forEach(rec=>Object.values(rec).forEach(r=>{
-      if(r.done){sets++;vol+=(parseFloat(r.weight)||0)*(parseFloat(r.reps)||0)}
-    }));
-    const item=document.createElement("div"); item.className="history-item";
-    item.innerHTML=`<strong>${date}</strong><div class="history-line"><span>완료 ${sets}세트</span><span>볼륨 ${Math.round(vol).toLocaleString()}</span></div>`;
-    list.appendChild(item);
+    Object.entries(all[date]).forEach(([dayKey,rec])=>{
+      const day=routine[dayKey];
+      if(!day) return;
+
+      let totalSets=0,totalVol=0;
+      let details="";
+
+      day.exercises.forEach((ex,ei)=>{
+        let setHtml="";
+        let exVol=0;
+
+        for(let si=0;si<ex.sets;si++){
+          const r=rec[recordKey(ei,si)];
+          if(!r || !r.done) continue;
+
+          const w=parseFloat(r.weight)||0;
+          const reps=parseFloat(r.reps)||0;
+          const v=w*reps;
+          totalSets++;
+          totalVol+=v;
+          exVol+=v;
+
+          setHtml += `<div class="history-set"><span>${si+1}세트</span><b>${r.weight||"-"}kg × ${r.reps||"-"}회</b></div>`;
+        }
+
+        if(setHtml){
+          details += `<div class="history-ex">
+            <div class="history-ex-head"><strong>${ex.name}</strong><span>볼륨 ${Math.round(exVol).toLocaleString()}</span></div>
+            ${setHtml}
+          </div>`;
+        }
+      });
+
+      if(!totalSets) return;
+
+      const item=document.createElement("div");
+      item.className="history-item";
+      item.innerHTML=`
+        <div class="history-summary" onclick="this.parentElement.classList.toggle('open')">
+          <div><strong>${date} · ${day.label}요일</strong><div class="sub">${day.title}</div></div>
+          <div style="text-align:right"><b>${totalSets}세트</b><div class="sub">볼륨 ${Math.round(totalVol).toLocaleString()}</div></div>
+        </div>
+        <div class="history-detail">${details}</div>`;
+      list.appendChild(item);
+    });
   });
 }
 function exportData(){
