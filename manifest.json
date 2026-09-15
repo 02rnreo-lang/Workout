@@ -1,7 +1,7 @@
 {
   "name": "Hypertrophy Log",
   "short_name": "운동기록",
-  "description": "주 5일 근비대 루틴과 중량·횟수·볼륨 기록",
+  "description": "주 5일 근비대 루틴과 중량·횟수·볼륨을 기록하는 개인 운동 로그",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

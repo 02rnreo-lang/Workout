@@ -330,9 +330,14 @@ const defaultRoutine = {
 };
 
 let routine = JSON.parse(localStorage.getItem("hl_routine") || "null") || structuredClone(defaultRoutine);
-let activeDay = localStorage.getItem("hl_active_day") || "mon";
+let activeDay = "mon";
 let editingIndex = null;
 let timerInt = null, secondsLeft = 90;
+function getKoreaDayKey(){
+  const wd=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Seoul",weekday:"short"}).format(new Date());
+  return ({Mon:"mon",Tue:"tue",Wed:"wed",Thu:"thu",Fri:"fri",Sat:"fri",Sun:"fri"})[wd]||"mon";
+}
+function setLaunchDayFromKoreaTime(){ activeDay=getKoreaDayKey(); }
 
 function dateKey(d=new Date()){ return d.toISOString().slice(0,10); }
 function dateForDayKey(dayKey){
@@ -353,8 +358,8 @@ function saveRecords(all){localStorage.setItem("hl_records",JSON.stringify(all))
 function recordKey(exIndex,setIndex){return `${exIndex}_${setIndex}`}
 
 function initDate(){
-  const d = new Date();
-  document.getElementById("dateLabel").textContent = d.toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
+  document.getElementById("dateLabel").textContent =
+    new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",year:"numeric",month:"long",day:"numeric",weekday:"short"}).format(new Date());
 }
 function renderTabs(){
   const wrap=document.getElementById("dayTabs"); wrap.innerHTML="";
@@ -362,7 +367,7 @@ function renderTabs(){
     const b=document.createElement("button");
     b.className="tab"+(key===activeDay?" active":"");
     b.textContent=day.label;
-    b.onclick=()=>{activeDay=key;localStorage.setItem("hl_active_day",key);renderWorkout()};
+    b.onclick=()=>{activeDay=key;renderWorkout()};
     wrap.appendChild(b);
   });
 }
@@ -666,7 +671,7 @@ document.querySelectorAll(".nav-btn").forEach(btn=>{
 });
 exerciseModal.addEventListener("click",e=>{if(e.target===exerciseModal)closeExerciseModal()});
 
-initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
+setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
 </script>
 
 <script>
