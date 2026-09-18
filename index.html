@@ -156,6 +156,9 @@ button{cursor:pointer}
 .history-set{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px;color:var(--muted)}
 .history-set b{color:var(--text)}
 
+
+.reorder-actions{display:flex;gap:5px}
+.reorder-actions button{min-width:34px;height:32px;border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:9px;font-weight:900}
 </style>
 </head>
 <body>
@@ -476,6 +479,10 @@ function renderWorkout(){
           <div class="exercise-meta">${ex.sets}세트 · 목표 ${ex.target||"8–12회"}</div>
         </div>
         <div class="exercise-actions">
+          <div class="reorder-actions">
+            <button onclick="moveExercise(${ei},-1)" title="위로 이동">↑</button>
+            <button onclick="moveExercise(${ei},1)" title="아래로 이동">↓</button>
+          </div>
           <button class="mini" onclick="editExercise(${ei})">편집</button>
           <button class="mini" onclick="deleteExercise(${ei})">삭제</button>
         </div>
@@ -539,10 +546,69 @@ function getPreviousWeekExercise(dayKey,ei){
   let vals=[];
   const ex=routine[dayKey].exercises[ei];
   for(let si=0;si<ex.sets;si++){
-    const r=rec[recordKey(ei,si)];
+    const r=rec[recordKey(ex,si)];
     if(r && (r.weight||r.reps)) vals.push(`${r.weight||"-"}kg × ${r.reps||"-"}`);
   }
   return vals.length?`지난주: <b>${vals.join(" / ")}</b>`:"지난주 기록 없음";
+}
+
+
+function ensureExerciseIds(){
+  let changed=false;
+  Object.entries(routine).forEach(([dayKey,day])=>{
+    day.exercises.forEach((ex,i)=>{
+      if(!ex.id){
+        ex.id=`${dayKey}-ex-${i+1}`;
+        changed=true;
+      }
+    });
+  });
+  if(changed) localStorage.setItem("hl_routine",JSON.stringify(routine));
+}
+
+/* Convert old index-keyed records (e.g. "0-2") to stable exercise-id keys.
+   This runs once after exercise IDs exist. */
+function migrateRecordsToExerciseIds(){
+  const marker="hl_exercise_id_migration_v1";
+  if(localStorage.getItem(marker)==="1") return;
+  const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
+  let changed=false;
+
+  Object.entries(all).forEach(([date,byDay])=>{
+    Object.entries(byDay||{}).forEach(([dayKey,rec])=>{
+      const day=routine[dayKey];
+      if(!day || !rec) return;
+      const converted={};
+
+      Object.entries(rec).forEach(([key,val])=>{
+        // Old format: exerciseIndex-setIndex
+        const m=key.match(/^(\\d+)-(\\d+)$/);
+        if(m){
+          const ei=Number(m[1]), si=Number(m[2]);
+          const ex=day.exercises[ei];
+          if(ex && ex.id){
+            converted[`${ex.id}::${si}`]=val;
+            changed=true;
+          }else converted[key]=val;
+        }else{
+          converted[key]=val;
+        }
+      });
+      byDay[dayKey]=converted;
+    });
+  });
+
+  if(changed) localStorage.setItem("hl_records",JSON.stringify(all));
+  localStorage.setItem(marker,"1");
+}
+
+function moveExercise(ei,delta){
+  const arr=routine[activeDay].exercises;
+  const ni=ei+delta;
+  if(ni<0 || ni>=arr.length) return;
+  [arr[ei],arr[ni]]=[arr[ni],arr[ei]];
+  localStorage.setItem("hl_routine",JSON.stringify(routine));
+  renderWorkout();
 }
 
 function changeSets(ei,delta){
@@ -685,7 +751,7 @@ function renderHistory(){
         let exVol=0;
 
         for(let si=0;si<ex.sets;si++){
-          const r=rec[recordKey(ei,si)];
+          const r=rec[recordKey(ex,si)];
           if(!r || !r.done) continue;
 
           const w=parseFloat(r.weight)||0;
@@ -753,7 +819,7 @@ document.querySelectorAll(".nav-btn").forEach(btn=>{
 });
 exerciseModal.addEventListener("click",e=>{if(e.target===exerciseModal)closeExerciseModal()});
 
-migrateLegacyUtcShiftedRecords(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
+migrateLegacyUtcShiftedRecords(); ensureExerciseIds(); migrateRecordsToExerciseIds(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
 </script>
 
 <script>
