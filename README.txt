@@ -24,3 +24,5 @@ Hypertrophy Log - FINAL 전체본
 
 적용 방법
 GitHub Workout 저장소 루트에서 기존 파일들을 이 ZIP 안의 파일들로 덮어쓰고 Commit 하면 됩니다.
+
+- 지난주 비교: 선택된 요일의 실제 날짜에서 정확히 7일 전 기록을 조회하도록 수정
