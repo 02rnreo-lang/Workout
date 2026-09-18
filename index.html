@@ -339,21 +339,89 @@ function getKoreaDayKey(){
 }
 function setLaunchDayFromKoreaTime(){ activeDay=getKoreaDayKey(); }
 
-function dateKey(d=new Date()){ return d.toISOString().slice(0,10); }
+function kstParts(date=new Date()){
+  const parts=new Intl.DateTimeFormat("en-CA",{
+    timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(date);
+  const v=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  return {y:Number(v.year),m:Number(v.month),d:Number(v.day)};
+}
+function ymd(y,m,d){
+  return `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
+function addDaysToKey(key,days){
+  const [y,m,d]=key.split("-").map(Number);
+  const x=new Date(Date.UTC(y,m-1,d));
+  x.setUTCDate(x.getUTCDate()+days);
+  return ymd(x.getUTCFullYear(),x.getUTCMonth()+1,x.getUTCDate());
+}
+function weekdayIndexForKey(key){
+  const [y,m,d]=key.split("-").map(Number);
+  return new Date(Date.UTC(y,m-1,d)).getUTCDay(); // Sun=0 ... Sat=6
+}
+function dateKey(date=new Date()){
+  const v=kstParts(date);
+  return ymd(v.y,v.m,v.d);
+}
+function koreaTodayKey(){ return dateKey(new Date()); }
+
+function mondayKeyForKoreaToday(){
+  const today=koreaTodayKey();
+  const dow=weekdayIndexForKey(today);
+  const daysFromMonday=(dow+6)%7;
+  return addDaysToKey(today,-daysFromMonday);
+}
 function dateForDayKey(dayKey){
-  const map={mon:0,tue:1,wed:2,thu:3,fri:4};
-  const monday=startOfWeek(new Date());
-  const d=new Date(monday);
-  d.setDate(monday.getDate()+(map[dayKey]??0));
-  return dateKey(d);
+  const offset={mon:0,tue:1,wed:2,thu:3,fri:4}[dayKey] ?? 0;
+  return addDaysToKey(mondayKeyForKoreaToday(),offset);
+}
+function previousWeekDateKey(dayKey){
+  return addDaysToKey(dateForDayKey(dayKey),-7);
 }
 
-function previousWeekDateKey(dayKey){
-  const currentKey=dateForDayKey(dayKey);
-  const parts=currentKey.split("-").map(Number);
-  const d=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
-  d.setUTCDate(d.getUTCDate()-7);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
+/* One-time repair for records saved by the old UTC date bug.
+   Only moves a record when its stored calendar date is exactly one day
+   before the weekday represented by its routine key. Existing target data
+   is merged rather than overwritten. */
+function migrateLegacyUtcShiftedRecords(){
+  const marker="hl_kst_date_migration_v1";
+  if(localStorage.getItem(marker)==="1") return;
+
+  const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
+  const targetDow={mon:1,tue:2,wed:3,thu:4,fri:5};
+  let changed=false;
+
+  Object.keys(all).sort().forEach(date=>{
+    const byDay=all[date];
+    if(!byDay || typeof byDay!=="object") return;
+
+    Object.keys(byDay).forEach(dayKey=>{
+      if(!(dayKey in targetDow)) return;
+      const actual=weekdayIndexForKey(date);
+      const wanted=targetDow[dayKey];
+
+      // Legacy bug in Korea: intended date was saved as the previous date.
+      if((actual+1)%7 !== wanted) return;
+
+      const fixedDate=addDaysToKey(date,1);
+      all[fixedDate]=all[fixedDate]||{};
+      const incoming=byDay[dayKey]||{};
+
+      if(all[fixedDate][dayKey]){
+        // Preserve both: existing target values win only when already present.
+        all[fixedDate][dayKey]={...incoming,...all[fixedDate][dayKey]};
+      }else{
+        all[fixedDate][dayKey]=incoming;
+      }
+
+      delete byDay[dayKey];
+      if(Object.keys(byDay).length===0) delete all[date];
+      changed=true;
+    });
+  });
+
+  if(changed) localStorage.setItem("hl_records",JSON.stringify(all));
+  localStorage.setItem(marker,"1");
 }
 
 function todayRecord(){
@@ -563,20 +631,25 @@ function updateTimerText(){
   timerTime.textContent=`${m}:${s}`;
 }
 function startOfWeek(d){
-  const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;
+  // Kept for compatibility; weekStats below uses KST date keys directly.
+  const x=new Date(d); const day=(x.getDay()+6)%7;
+  x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;
 }
 function weekStats(offsetWeeks=0){
   const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
-  const start=startOfWeek(new Date()); start.setDate(start.getDate()+offsetWeeks*7);
-  const end=new Date(start); end.setDate(end.getDate()+7);
+  const baseMonday=mondayKeyForKoreaToday();
+  const startKey=addDaysToKey(baseMonday,offsetWeeks*7);
+  const endKey=addDaysToKey(startKey,7);
   let sets=0,volume=0,days=new Set();
+
   Object.entries(all).forEach(([date,byDay])=>{
-    const d=new Date(date+"T00:00:00");
-    if(d>=start && d<end){
+    if(date>=startKey && date<endKey){
       Object.values(byDay).forEach(rec=>{
         Object.values(rec).forEach(r=>{
           if(r.done){
-            sets++; volume+=(parseFloat(r.weight)||0)*(parseFloat(r.reps)||0); days.add(date);
+            sets++;
+            volume+=(parseFloat(r.weight)||0)*(parseFloat(r.reps)||0);
+            days.add(date);
           }
         });
       });
@@ -680,7 +753,7 @@ document.querySelectorAll(".nav-btn").forEach(btn=>{
 });
 exerciseModal.addEventListener("click",e=>{if(e.target===exerciseModal)closeExerciseModal()});
 
-setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
+migrateLegacyUtcShiftedRecords(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
 </script>
 
 <script>
