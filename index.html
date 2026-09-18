@@ -435,7 +435,16 @@ function todayRecord(){
   return {all,k,rec:all[k][activeDay]};
 }
 function saveRecords(all){localStorage.setItem("hl_records",JSON.stringify(all))}
-function recordKey(exIndex,setIndex){return `${exIndex}_${setIndex}`}
+function recordKey(exOrIndex,setIndex){
+  const ex=(typeof exOrIndex==="number") ? routine[activeDay]?.exercises?.[exOrIndex] : exOrIndex;
+  if(ex?.id) return `${ex.id}::${setIndex}`;
+  const fallbackIndex=(typeof exOrIndex==="number") ? exOrIndex : routine[activeDay]?.exercises?.indexOf(exOrIndex);
+  return `${fallbackIndex>=0?fallbackIndex:0}_${setIndex}`;
+}
+function readSetRecord(rec,ex,ei,si){
+  if(!rec) return undefined;
+  return rec[`${ex.id}::${si}`] ?? rec[`${ei}_${si}`] ?? rec[`${ei}-${si}`];
+}
 
 function initDate(){
   document.getElementById("dateLabel").textContent =
@@ -464,7 +473,7 @@ function renderWorkout(){
     const card=document.createElement("div"); card.className="exercise";
     let rows="";
     for(let si=0;si<ex.sets;si++){
-      const r=rec[recordKey(ei,si)] || {};
+      const r=readSetRecord(rec,ex,ei,si) || {};
       rows += `<div class="set-row">
         <div class="set-num">${si+1}</div>
         <input class="field" inputmode="decimal" placeholder="kg" value="${r.weight??""}" oninput="saveSet(${ei},${si},'weight',this.value)">
@@ -501,7 +510,7 @@ function renderWorkout(){
 }
 function saveSet(ei,si,field,value){
   const {all,k,rec}=todayRecord();
-  const key=recordKey(ei,si);
+  const key=recordKey(routine[activeDay].exercises[ei],si);
   rec[key]=rec[key]||{};
   rec[key][field]=value;
   all[k][activeDay]=rec;
@@ -510,7 +519,7 @@ function saveSet(ei,si,field,value){
 }
 function toggleDone(ei,si){
   const {all,k,rec}=todayRecord();
-  const key=recordKey(ei,si);
+  const key=recordKey(routine[activeDay].exercises[ei],si);
   rec[key]=rec[key]||{};
   const wasDone=!!rec[key].done;
   rec[key].done=!wasDone;
@@ -526,7 +535,7 @@ function updateTodayStats(){
   day.exercises.forEach((ex,ei)=>{
     for(let si=0;si<ex.sets;si++){
       total++;
-      const r=rec[recordKey(ei,si)]||{};
+      const r=readSetRecord(rec,ex,ei,si)||{};
       if(r.done) done++;
       const w=parseFloat(r.weight)||0, reps=parseFloat(r.reps)||0;
       if(r.done) volume += w*reps;
@@ -541,17 +550,15 @@ function updateTodayStats(){
 }
 function getPreviousWeekExercise(dayKey,ei){
   const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
-  const d=new Date(); d.setDate(d.getDate()-7);
-  const rec=all[dateKey(d)]?.[dayKey]||{};
-  let vals=[];
+  const rec=all[previousWeekDateKey(dayKey)]?.[dayKey]||{};
   const ex=routine[dayKey].exercises[ei];
+  let vals=[];
   for(let si=0;si<ex.sets;si++){
-    const r=rec[recordKey(ex,si)];
+    const r=readSetRecord(rec,ex,ei,si);
     if(r && (r.weight||r.reps)) vals.push(`${r.weight||"-"}kg × ${r.reps||"-"}`);
   }
   return vals.length?`지난주: <b>${vals.join(" / ")}</b>`:"지난주 기록 없음";
 }
-
 
 function ensureExerciseIds(){
   let changed=false;
@@ -569,30 +576,30 @@ function ensureExerciseIds(){
 /* Convert old index-keyed records (e.g. "0-2") to stable exercise-id keys.
    This runs once after exercise IDs exist. */
 function migrateRecordsToExerciseIds(){
-  const marker="hl_exercise_id_migration_v1";
+  const marker="hl_exercise_id_migration_v3";
   if(localStorage.getItem(marker)==="1") return;
+
   const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
   let changed=false;
 
   Object.entries(all).forEach(([date,byDay])=>{
     Object.entries(byDay||{}).forEach(([dayKey,rec])=>{
-      const day=routine[dayKey];
-      if(!day || !rec) return;
-      const converted={};
+      if(!routine[dayKey] || !rec || typeof rec!=="object") return;
+      const converted={...rec};
 
       Object.entries(rec).forEach(([key,val])=>{
-        // Old format: exerciseIndex-setIndex
-        const m=key.match(/^(\\d+)-(\\d+)$/);
-        if(m){
-          const ei=Number(m[1]), si=Number(m[2]);
-          const ex=day.exercises[ei];
-          if(ex && ex.id){
-            converted[`${ex.id}::${si}`]=val;
-            changed=true;
-          }else converted[key]=val;
-        }else{
-          converted[key]=val;
-        }
+        const m=key.match(/^(\d+)[_-](\d+)$/);
+        if(!m) return;
+        const originalIndex=Number(m[1]), si=Number(m[2]);
+
+        // Built-in/previous exercises first received IDs by original slot.
+        // Use that original slot ID regardless of today's reordered position.
+        const originalId=`${dayKey}-ex-${originalIndex+1}`;
+        const newKey=`${originalId}::${si}`;
+
+        if(converted[newKey]===undefined) converted[newKey]=val;
+        delete converted[key];
+        changed=true;
       });
       byDay[dayKey]=converted;
     });
@@ -618,7 +625,7 @@ function changeSets(ei,delta){
   if(next===oldSets) return;
   if(next<oldSets){
     const {all,k,rec}=todayRecord();
-    delete rec[recordKey(ei,oldSets-1)];
+    delete rec[recordKey(ex,oldSets-1)];
     all[k][activeDay]=rec;
     saveRecords(all);
   }
@@ -662,9 +669,12 @@ function closeExerciseModal(){exerciseModal.classList.remove("show")}
 function saveExercise(){
   const name=exName.value.trim(); const sets=Math.max(1,Math.min(10,parseInt(exSets.value)||1)); const target=exTarget.value.trim()||"8–12회";
   if(!name){alert("운동 이름을 입력해줘.");return}
-  const ex={name,sets,target};
-  if(editingIndex===null) routine[activeDay].exercises.push(ex);
-  else routine[activeDay].exercises[editingIndex]=ex;
+  if(editingIndex===null){
+    routine[activeDay].exercises.push({name,sets,target,id:`${activeDay}-custom-${Date.now()}`});
+  }else{
+    const old=routine[activeDay].exercises[editingIndex];
+    routine[activeDay].exercises[editingIndex]={...old,name,sets,target,id:old.id||`${activeDay}-custom-${Date.now()}`};
+  }
   localStorage.setItem("hl_routine",JSON.stringify(routine));
   closeExerciseModal(); renderWorkout();
 }
@@ -751,7 +761,7 @@ function renderHistory(){
         let exVol=0;
 
         for(let si=0;si<ex.sets;si++){
-          const r=rec[recordKey(ex,si)];
+          const r=readSetRecord(rec,ex,ei,si);
           if(!r || !r.done) continue;
 
           const w=parseFloat(r.weight)||0;
@@ -795,7 +805,7 @@ function exportData(){
 function resetAll(){
   if(!confirm("루틴과 모든 운동 기록을 삭제할까요?")) return;
   localStorage.removeItem("hl_records"); localStorage.removeItem("hl_routine");
-  routine=structuredClone(defaultRoutine); renderWorkout(); renderHistory(); renderStats();
+  routine=structuredClone(defaultRoutine); ensureExerciseIds(); renderWorkout(); renderHistory(); renderStats();
 }
 function applyTheme(){
   const t=localStorage.getItem("hl_theme")||"dark";
