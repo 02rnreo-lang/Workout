@@ -435,16 +435,31 @@ function todayRecord(){
   return {all,k,rec:all[k][activeDay]};
 }
 function saveRecords(all){localStorage.setItem("hl_records",JSON.stringify(all))}
+function normalizeExerciseName(name){
+  return String(name||"").trim().replace(/\s+/g," ").toLocaleLowerCase("ko-KR");
+}
+function nameRecordKey(name,setIndex){
+  return `name:${encodeURIComponent(normalizeExerciseName(name))}::${setIndex}`;
+}
 function recordKey(exOrIndex,setIndex){
   const ex=(typeof exOrIndex==="number") ? routine[activeDay]?.exercises?.[exOrIndex] : exOrIndex;
-  if(ex?.id) return `${ex.id}::${setIndex}`;
-  const fallbackIndex=(typeof exOrIndex==="number") ? exOrIndex : routine[activeDay]?.exercises?.indexOf(exOrIndex);
-  return `${fallbackIndex>=0?fallbackIndex:0}_${setIndex}`;
+  if(ex?.name) return nameRecordKey(ex.name,setIndex);
+  return `${exOrIndex}_${setIndex}`;
 }
 function readSetRecord(rec,ex,ei,si){
   if(!rec) return undefined;
-  return rec[`${ex.id}::${si}`] ?? rec[`${ei}_${si}`] ?? rec[`${ei}-${si}`];
+  // New format first: name based. Old ID/index formats remain readable.
+  return rec[nameRecordKey(ex?.name,si)]
+      ?? (ex?.id ? rec[`${ex.id}::${si}`] : undefined)
+      ?? rec[`${ei}_${si}`]
+      ?? rec[`${ei}-${si}`];
 }
+function stampSetRecord(r,ex){
+  r.exerciseName=ex.name;
+  r.exerciseNameNorm=normalizeExerciseName(ex.name);
+  return r;
+}
+
 
 function initDate(){
   document.getElementById("dateLabel").textContent =
@@ -511,7 +526,7 @@ function renderWorkout(){
 function saveSet(ei,si,field,value){
   const {all,k,rec}=todayRecord();
   const key=recordKey(routine[activeDay].exercises[ei],si);
-  rec[key]=rec[key]||{};
+  rec[key]=stampSetRecord(rec[key]||{},routine[activeDay].exercises[ei]);
   rec[key][field]=value;
   all[k][activeDay]=rec;
   saveRecords(all);
@@ -520,7 +535,7 @@ function saveSet(ei,si,field,value){
 function toggleDone(ei,si){
   const {all,k,rec}=todayRecord();
   const key=recordKey(routine[activeDay].exercises[ei],si);
-  rec[key]=rec[key]||{};
+  rec[key]=stampSetRecord(rec[key]||{},routine[activeDay].exercises[ei]);
   const wasDone=!!rec[key].done;
   rec[key].done=!wasDone;
   all[k][activeDay]=rec;
@@ -550,14 +565,50 @@ function updateTodayStats(){
 }
 function getPreviousWeekExercise(dayKey,ei){
   const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
-  const rec=all[previousWeekDateKey(dayKey)]?.[dayKey]||{};
   const ex=routine[dayKey].exercises[ei];
-  let vals=[];
-  for(let si=0;si<ex.sets;si++){
-    const r=readSetRecord(rec,ex,ei,si);
-    if(r && (r.weight||r.reps)) vals.push(`${r.weight||"-"}kg × ${r.reps||"-"}`);
+  const wanted=normalizeExerciseName(ex.name);
+  const currentDate=dateForDayKey(dayKey);
+  const dates=Object.keys(all).filter(d=>d<currentDate).sort().reverse();
+
+  for(const date of dates){
+    const rec=all[date]?.[dayKey];
+    if(!rec) continue;
+
+    let vals=[];
+    let matched=false;
+
+    // New name-keyed records: independent of exercise order and old slot.
+    for(let si=0;si<20;si++){
+      const r=rec[nameRecordKey(ex.name,si)];
+      if(r){
+        matched=true;
+        if(r.weight||r.reps) vals.push(`${r.weight||"-"}kg × ${r.reps||"-"}`);
+      }
+    }
+
+    // Compatibility: records already carrying a saved name snapshot.
+    if(!matched){
+      const bySet=[];
+      Object.entries(rec).forEach(([key,r])=>{
+        if(!r || normalizeExerciseName(r.exerciseName||r.exerciseNameNorm)!==wanted) return;
+        const m=key.match(/::(\d+)$/) || key.match(/[_-](\d+)$/);
+        const si=m?Number(m[1]):999;
+        bySet.push([si,r]);
+      });
+      bySet.sort((a,b)=>a[0]-b[0]);
+      if(bySet.length){
+        matched=true;
+        vals=bySet.filter(([,r])=>r.weight||r.reps).map(([,r])=>`${r.weight||"-"}kg × ${r.reps||"-"}`);
+      }
+    }
+
+    if(matched && vals.length){
+      const diff=Math.round((new Date(currentDate+"T00:00:00Z")-new Date(date+"T00:00:00Z"))/86400000);
+      const when=diff===7?"지난주":`${date} 최근기록`;
+      return `${when}: <b>${vals.join(" / ")}</b>`;
+    }
   }
-  return vals.length?`지난주: <b>${vals.join(" / ")}</b>`:"지난주 기록 없음";
+  return "이 운동의 이전 기록 없음";
 }
 
 function ensureExerciseIds(){
@@ -608,6 +659,34 @@ function migrateRecordsToExerciseIds(){
   if(changed) localStorage.setItem("hl_records",JSON.stringify(all));
   localStorage.setItem(marker,"1");
 }
+function migrateReadableRecordsToNameKeys(){
+  const marker="hl_name_key_migration_v1";
+  if(localStorage.getItem(marker)==="1") return;
+  const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
+  let changed=false;
+
+  Object.entries(all).forEach(([date,byDay])=>{
+    Object.entries(byDay||{}).forEach(([dayKey,rec])=>{
+      const day=routine[dayKey];
+      if(!day || !rec || typeof rec!=="object") return;
+
+      day.exercises.forEach((ex,ei)=>{
+        for(let si=0;si<20;si++){
+          const nk=nameRecordKey(ex.name,si);
+          if(rec[nk]!==undefined) continue;
+          const old=rec[`${ex.id}::${si}`] ?? rec[`${ei}_${si}`] ?? rec[`${ei}-${si}`];
+          if(old!==undefined){
+            rec[nk]=stampSetRecord({...old},ex);
+            changed=true;
+          }
+        }
+      });
+    });
+  });
+  if(changed) localStorage.setItem("hl_records",JSON.stringify(all));
+  localStorage.setItem(marker,"1");
+}
+
 
 function moveExercise(ei,delta){
   const arr=routine[activeDay].exercises;
@@ -751,47 +830,63 @@ function renderHistory(){
   dates.slice(0,30).forEach(date=>{
     Object.entries(all[date]).forEach(([dayKey,rec])=>{
       const day=routine[dayKey];
-      if(!day) return;
+      if(!day || !rec) return;
 
-      let totalSets=0,totalVol=0;
-      let details="";
+      const groups=new Map();
+      Object.entries(rec).forEach(([key,r])=>{
+        if(!r || !r.done) return;
+        let name=r.exerciseName||"";
+        let si=999;
 
-      day.exercises.forEach((ex,ei)=>{
-        let setHtml="";
-        let exVol=0;
-
-        for(let si=0;si<ex.sets;si++){
-          const r=readSetRecord(rec,ex,ei,si);
-          if(!r || !r.done) continue;
-
-          const w=parseFloat(r.weight)||0;
-          const reps=parseFloat(r.reps)||0;
-          const v=w*reps;
-          totalSets++;
-          totalVol+=v;
-          exVol+=v;
-
-          setHtml += `<div class="history-set"><span>${si+1}세트</span><b>${r.weight||"-"}kg × ${r.reps||"-"}회</b></div>`;
+        const nm=key.match(/^name:(.*?)::(\d+)$/);
+        if(nm){
+          if(!name){ try{name=decodeURIComponent(nm[1])}catch(e){name=nm[1]} }
+          si=Number(nm[2]);
+        }else{
+          const im=key.match(/::(\d+)$/)||key.match(/[_-](\d+)$/);
+          if(im) si=Number(im[1]);
         }
+        if(!name) return; // legacy duplicate without a reliable name snapshot
 
-        if(setHtml){
-          details += `<div class="history-ex">
-            <div class="history-ex-head"><strong>${ex.name}</strong><span>볼륨 ${Math.round(exVol).toLocaleString()}</span></div>
-            ${setHtml}
-          </div>`;
-        }
+        const norm=normalizeExerciseName(name);
+        if(!groups.has(norm)) groups.set(norm,{name,sets:[]});
+        groups.get(norm).sets.push([si,r]);
       });
 
+      let totalSets=0,totalVol=0,details="";
+      groups.forEach(g=>{
+        g.sets.sort((a,b)=>a[0]-b[0]);
+        let setHtml="",exVol=0;
+        g.sets.forEach(([si,r])=>{
+          const w=parseFloat(r.weight)||0,reps=parseFloat(r.reps)||0,v=w*reps;
+          totalSets++; totalVol+=v; exVol+=v;
+          setHtml+=`<div class="history-set"><span>${si+1}세트</span><b>${r.weight||"-"}kg × ${r.reps||"-"}회</b></div>`;
+        });
+        details+=`<div class="history-ex"><div class="history-ex-head"><strong>${g.name}</strong><span>볼륨 ${Math.round(exVol).toLocaleString()}</span></div>${setHtml}</div>`;
+      });
+
+      // Fallback for untouched legacy records: use current routine reader so old history is not hidden.
+      if(!totalSets){
+        day.exercises.forEach((ex,ei)=>{
+          let setHtml="",exVol=0;
+          for(let si=0;si<ex.sets;si++){
+            const r=readSetRecord(rec,ex,ei,si);
+            if(!r||!r.done) continue;
+            const w=parseFloat(r.weight)||0,reps=parseFloat(r.reps)||0,v=w*reps;
+            totalSets++; totalVol+=v; exVol+=v;
+            setHtml+=`<div class="history-set"><span>${si+1}세트</span><b>${r.weight||"-"}kg × ${r.reps||"-"}회</b></div>`;
+          }
+          if(setHtml) details+=`<div class="history-ex"><div class="history-ex-head"><strong>${ex.name}</strong><span>볼륨 ${Math.round(exVol).toLocaleString()}</span></div>${setHtml}</div>`;
+        });
+      }
       if(!totalSets) return;
 
       const item=document.createElement("div");
       item.className="history-item";
-      item.innerHTML=`
-        <div class="history-summary" onclick="this.parentElement.classList.toggle('open')">
-          <div><strong>${date} · ${day.label}요일</strong><div class="sub">${day.title}</div></div>
-          <div style="text-align:right"><b>${totalSets}세트</b><div class="sub">볼륨 ${Math.round(totalVol).toLocaleString()}</div></div>
-        </div>
-        <div class="history-detail">${details}</div>`;
+      item.innerHTML=`<div class="history-summary" onclick="this.parentElement.classList.toggle('open')">
+        <div><strong>${date} · ${day.label}요일</strong><div class="sub">${day.title}</div></div>
+        <div style="text-align:right"><b>${totalSets}세트</b><div class="sub">볼륨 ${Math.round(totalVol).toLocaleString()}</div></div>
+      </div><div class="history-detail">${details}</div>`;
       list.appendChild(item);
     });
   });
@@ -829,7 +924,7 @@ document.querySelectorAll(".nav-btn").forEach(btn=>{
 });
 exerciseModal.addEventListener("click",e=>{if(e.target===exerciseModal)closeExerciseModal()});
 
-migrateLegacyUtcShiftedRecords(); ensureExerciseIds(); migrateRecordsToExerciseIds(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
+migrateLegacyUtcShiftedRecords(); ensureExerciseIds(); migrateRecordsToExerciseIds(); migrateReadableRecordsToNameKeys(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
 </script>
 
 <script>
