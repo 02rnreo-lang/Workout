@@ -278,7 +278,9 @@ button{cursor:pointer}
 <div class="modal" id="exerciseModal">
   <div class="sheet">
     <h3 id="modalTitle">운동 종목 추가</h3>
-    <input class="field" id="exName" placeholder="운동 이름" />
+    <input class="field" id="exName" placeholder="운동 이름" / list="exerciseNameSuggestions" autocomplete="off">
+      <datalist id="exerciseNameSuggestions"></datalist>
+      <div class="sub" style="margin-top:5px">기존 운동명을 선택하면 과거 기록과 정확히 연결됩니다.</div>
     <div class="form-row">
       <input class="field" id="exSets" type="number" min="1" max="10" placeholder="세트 수" />
       <input class="field" id="exTarget" placeholder="목표 횟수 예: 8–12회" />
@@ -291,48 +293,54 @@ button{cursor:pointer}
 
 <script>
 const defaultRoutine = {
-  mon:{label:"월",title:"등 + 이두",exercises:[
-    {name:"랫풀다운",sets:5,target:"8–12회"},
-    {name:"바벨 로우",sets:5,target:"8–12회"},
-    {name:"시티드 케이블 로우",sets:4,target:"8–12회"},
-    {name:"인클라인 덤벨 컬",sets:4,target:"8–12회"},
-    {name:"해머 컬",sets:4,target:"8–12회"}
+  mon:{label:"월",title:"등 + 이두 + 후면어깨",exercises:[
+    {name:"어시스트 풀업",sets:3,target:"6–10회"},
+    {name:"로우머신",sets:3,target:"8–12회"},
+    {name:"풀다운 머신",sets:3,target:"8–12회"},
+    {name:"암풀다운",sets:3,target:"8–12회"},
+    {name:"바벨 컬",sets:3,target:"8–12회"},
+    {name:"해머 컬",sets:3,target:"8–12회"},
+    {name:"리어델트 플라이",sets:4,target:"12–20회"}
   ]},
-  tue:{label:"화",title:"가슴 + 삼두",exercises:[
-    {name:"벤치프레스",sets:5,target:"8–12회"},
-    {name:"인클라인 덤벨프레스",sets:5,target:"8–12회"},
+  tue:{label:"화",title:"가슴 + 삼두 + 측면어깨",exercises:[
+    {name:"인클라인 벤치프레스",sets:4,target:"6–10회"},
     {name:"체스트 프레스",sets:4,target:"8–12회"},
-    {name:"케이블 푸시다운",sets:4,target:"8–12회"},
-    {name:"오버헤드 익스텐션",sets:4,target:"8–12회"}
+    {name:"플라이 머신",sets:3,target:"12–15회"},
+    {name:"오버헤드 익스텐션",sets:3,target:"8–12회"},
+    {name:"케이블 푸시다운",sets:3,target:"8–12회"},
+    {name:"사이드 레터럴 레이즈",sets:5,target:"12–20회"}
   ]},
-  wed:{label:"수",title:"이두 + 삼두 + 측면어깨",exercises:[
-    {name:"바벨 컬",sets:4,target:"8–12회"},
-    {name:"인클라인 덤벨 컬",sets:4,target:"8–12회"},
-    {name:"케이블 푸시다운",sets:4,target:"8–12회"},
-    {name:"오버헤드 익스텐션",sets:4,target:"8–12회"},
-    {name:"사이드 레터럴 레이즈",sets:4,target:"10–15회"}
+  wed:{label:"수",title:"하체",exercises:[
+    {name:"핵스쿼트 머신",sets:4,target:"6–10회"},
+    {name:"레그 프레스",sets:4,target:"8–12회"},
+    {name:"레그 익스텐션",sets:3,target:"10–15회"},
+    {name:"레그 컬",sets:4,target:"10–15회"},
+    {name:"힙 어덕션",sets:3,target:"10–15회"}
   ]},
-  thu:{label:"목",title:"어깨 + 하체",exercises:[
-    {name:"숄더 프레스",sets:4,target:"8–12회"},
-    {name:"사이드 레터럴 레이즈",sets:4,target:"10–15회"},
-    {name:"리어델트 플라이",sets:4,target:"10–15회"},
-    {name:"스쿼트",sets:5,target:"6–10회"},
-    {name:"레그 프레스",sets:5,target:"8–12회"},
-    {name:"레그 컬",sets:5,target:"8–12회"}
+  thu:{label:"목",title:"등 + 가슴 + 후면어깨",exercises:[
+    {name:"암풀다운",sets:2,target:"8–12회"},
+    {name:"로우머신",sets:3,target:"8–12회"},
+    {name:"풀다운 머신",sets:3,target:"8–12회"},
+    {name:"인클라인 벤치프레스",sets:3,target:"8–12회"},
+    {name:"플라이 머신",sets:3,target:"12–15회"},
+    {name:"리어델트 플라이",sets:4,target:"12–20회"}
   ]},
-  fri:{label:"금",title:"등 + 가슴 + 팔",exercises:[
-    {name:"랫풀다운",sets:4,target:"8–12회"},
-    {name:"시티드 로우",sets:4,target:"8–12회"},
-    {name:"인클라인 체스트 프레스",sets:4,target:"8–12회"},
-    {name:"펙덱 플라이",sets:4,target:"10–15회"},
-    {name:"이두 컬",sets:4,target:"8–12회"},
-    {name:"삼두 푸시다운",sets:4,target:"8–12회"},
-    {name:"추가 이두",sets:4,target:"8–12회"},
-    {name:"추가 삼두",sets:4,target:"8–12회"}
+  fri:{label:"금",title:"측면어깨 + 팔",exercises:[
+    {name:"사이드 레터럴 레이즈",sets:7,target:"12–20회"},
+    {name:"케이블 컬",sets:3,target:"8–12회"},
+    {name:"케이블 리버스 컬",sets:3,target:"10–15회"},
+    {name:"오버헤드 익스텐션",sets:3,target:"8–12회"},
+    {name:"케이블 푸시다운",sets:3,target:"8–12회"}
   ]}
 };
 
 let routine = JSON.parse(localStorage.getItem("hl_routine") || "null") || structuredClone(defaultRoutine);
+function applyRoutineV14Once(){
+  if(localStorage.getItem("hl_routine_v14_applied")==="1") return;
+  routine=structuredClone(defaultRoutine);
+  localStorage.setItem("hl_routine",JSON.stringify(routine));
+  localStorage.setItem("hl_routine_v14_applied","1");
+}
 let activeDay = "mon";
 let editingIndex = null;
 let timerInt = null, secondsLeft = 90;
@@ -565,47 +573,31 @@ function updateTodayStats(){
 }
 function getPreviousWeekExercise(dayKey,ei){
   const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
-  const ex=routine[dayKey].exercises[ei];
-  const wanted=normalizeExerciseName(ex.name);
+  const ex=routine[dayKey].exercises[ei], wanted=normalizeExerciseName(ex.name);
   const currentDate=dateForDayKey(dayKey);
   const dates=Object.keys(all).filter(d=>d<currentDate).sort().reverse();
-
   for(const date of dates){
-    const rec=all[date]?.[dayKey];
-    if(!rec) continue;
-
-    let vals=[];
-    let matched=false;
-
-    // New name-keyed records: independent of exercise order and old slot.
-    for(let si=0;si<20;si++){
-      const r=rec[nameRecordKey(ex.name,si)];
-      if(r){
-        matched=true;
-        if(r.weight||r.reps) vals.push(`${r.weight||"-"}kg × ${r.reps||"-"}`);
+    for(const [savedDayKey,rec] of Object.entries(all[date]||{})){
+      if(!rec) continue;
+      let vals=[], matched=false;
+      for(let si=0;si<20;si++){
+        const r=rec[nameRecordKey(ex.name,si)];
+        if(r){matched=true;if(r.weight||r.reps) vals.push(`${r.weight||"-"}kg × ${r.reps||"-"}`);}
       }
-    }
-
-    // Compatibility: records already carrying a saved name snapshot.
-    if(!matched){
-      const bySet=[];
-      Object.entries(rec).forEach(([key,r])=>{
-        if(!r || normalizeExerciseName(r.exerciseName||r.exerciseNameNorm)!==wanted) return;
-        const m=key.match(/::(\d+)$/) || key.match(/[_-](\d+)$/);
-        const si=m?Number(m[1]):999;
-        bySet.push([si,r]);
-      });
-      bySet.sort((a,b)=>a[0]-b[0]);
-      if(bySet.length){
-        matched=true;
-        vals=bySet.filter(([,r])=>r.weight||r.reps).map(([,r])=>`${r.weight||"-"}kg × ${r.reps||"-"}`);
+      if(!matched){
+        const found=[];
+        Object.entries(rec).forEach(([key,r])=>{
+          if(!r||normalizeExerciseName(r.exerciseName||r.exerciseNameNorm||"")!==wanted)return;
+          const m=key.match(/::(\d+)$/)||key.match(/[_-](\d+)$/);
+          found.push([m?Number(m[1]):999,r]);
+        });
+        found.sort((x,y)=>x[0]-y[0]);
+        if(found.length){matched=true;vals=found.filter(x=>x[1].weight||x[1].reps).map(x=>`${x[1].weight||"-"}kg × ${x[1].reps||"-"}`);}
       }
-    }
-
-    if(matched && vals.length){
-      const diff=Math.round((new Date(currentDate+"T00:00:00Z")-new Date(date+"T00:00:00Z"))/86400000);
-      const when=diff===7?"지난주":`${date} 최근기록`;
-      return `${when}: <b>${vals.join(" / ")}</b>`;
+      if(matched&&vals.length){
+        const dl=routine[savedDayKey]?.label?` · ${routine[savedDayKey].label}요일`:"";
+        return `${date}${dl} 최근기록: <b>${vals.join(" / ")}</b>`;
+      }
     }
   }
   return "이 운동의 이전 기록 없음";
@@ -732,7 +724,62 @@ function refreshTimerSettingsUI(){
 
 
 
+
+function getKnownExerciseNames(){
+  const names=new Map();
+  const add=name=>{
+    const clean=String(name||"").trim().replace(/\s+/g," ");
+    if(!clean) return;
+    const norm=normalizeExerciseName(clean);
+    if(!names.has(norm)) names.set(norm,clean);
+  };
+
+  // Current/default routine names
+  Object.values(routine).forEach(day=>day.exercises.forEach(ex=>add(ex.name)));
+  Object.values(defaultRoutine).forEach(day=>day.exercises.forEach(ex=>add(ex.name)));
+
+  // Historical saved names
+  const all=JSON.parse(localStorage.getItem("hl_records")||"{}");
+  Object.values(all).forEach(byDay=>Object.values(byDay||{}).forEach(rec=>{
+    Object.entries(rec||{}).forEach(([key,r])=>{
+      if(r?.exerciseName) add(r.exerciseName);
+      const m=key.match(/^name:(.*?)::\d+$/);
+      if(m){
+        try{ add(decodeURIComponent(m[1])); }catch(e){}
+      }
+    });
+  }));
+  return [...names.values()].sort((a,b)=>a.localeCompare(b,"ko"));
+}
+function refreshExerciseNameSuggestions(){
+  const dl=document.getElementById("exerciseNameSuggestions");
+  if(!dl) return;
+  dl.innerHTML="";
+  getKnownExerciseNames().forEach(name=>{
+    const opt=document.createElement("option");
+    opt.value=name;
+    dl.appendChild(opt);
+  });
+}
+function canonicalExerciseName(input){
+  const clean=String(input||"").trim().replace(/\s+/g," ");
+  if(!clean) return clean;
+
+  // First exact normalized match.
+  const wanted=normalizeExerciseName(clean);
+  const known=getKnownExerciseNames();
+  const exact=known.find(n=>normalizeExerciseName(n)===wanted);
+  if(exact) return exact;
+
+  // Also treat spacing-only differences as the same exercise:
+  // "체스트프레스" -> existing "체스트 프레스"
+  const compact=s=>normalizeExerciseName(s).replace(/\s+/g,"");
+  const spacingMatch=known.find(n=>compact(n)===compact(clean));
+  return spacingMatch||clean;
+}
+
 function openExerciseModal(){
+  refreshExerciseNameSuggestions();
   editingIndex=null;
   document.getElementById("modalTitle").textContent="운동 종목 추가";
   exName.value=""; exSets.value=4; exTarget.value="8–12회";
@@ -746,7 +793,7 @@ function editExercise(i){
 }
 function closeExerciseModal(){exerciseModal.classList.remove("show")}
 function saveExercise(){
-  const name=exName.value.trim(); const sets=Math.max(1,Math.min(10,parseInt(exSets.value)||1)); const target=exTarget.value.trim()||"8–12회";
+  const name=canonicalExerciseName(exName.value); const sets=Math.max(1,Math.min(10,parseInt(exSets.value)||1)); const target=exTarget.value.trim()||"8–12회";
   if(!name){alert("운동 이름을 입력해줘.");return}
   if(editingIndex===null){
     routine[activeDay].exercises.push({name,sets,target,id:`${activeDay}-custom-${Date.now()}`});
@@ -924,7 +971,7 @@ document.querySelectorAll(".nav-btn").forEach(btn=>{
 });
 exerciseModal.addEventListener("click",e=>{if(e.target===exerciseModal)closeExerciseModal()});
 
-migrateLegacyUtcShiftedRecords(); ensureExerciseIds(); migrateRecordsToExerciseIds(); migrateReadableRecordsToNameKeys(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
+migrateLegacyUtcShiftedRecords(); applyRoutineV14Once(); ensureExerciseIds(); migrateRecordsToExerciseIds(); migrateReadableRecordsToNameKeys(); setLaunchDayFromKoreaTime(); initDate(); applyTheme(); renderWorkout(); renderHistory(); renderStats(); refreshTimerSettingsUI();
 </script>
 
 <script>
